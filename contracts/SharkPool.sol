@@ -3,6 +3,10 @@ pragma solidity ^0.4.13;
 import './BitcoineumInterface.sol';
 import 'zeppelin-solidity/contracts/ReentrancyGuard.sol';
 
+// Sharkpool is a rolling window Bitcoineum miner
+// Smart contract based virtual mining
+// http://www.bitcoineum.com/
+
 contract SharkPool is ReentrancyGuard {
 
     uint256 constant public max_users = 256;
@@ -31,10 +35,10 @@ contract SharkPool is ReentrancyGuard {
     uint8[] slots;
     address[256] public active_users; // Should equal max_users
 
-    function allocate_slot(address who) {
-       if(total_users < max_users) {
+    function allocate_slot(address _who) internal {
+       if(total_users < max_users) { 
             // Just push into active_users
-            active_users[total_users] = who;
+            active_users[total_users] = _who;
             total_users += 1;
           } else {
             // The maximum users have been reached, can we allocate a free space?
@@ -43,7 +47,7 @@ contract SharkPool is ReentrancyGuard {
                 revert();
             } else {
                uint8 location = slots[slots.length-1];
-               active_users[location] = who;
+               active_users[location] = _who;
                delete slots[slots.length-1];
             }
           }
@@ -95,7 +99,14 @@ contract SharkPool is ReentrancyGuard {
       base_contract = BitcoineumInterface(get_bitcoineum_contract_address());
     }
 
+    function calculate_minimum_contribution() constant returns (uint256)  {
+       return base_contract.currentDifficultyWei() / 10000000;
+    }
+
+    // A default ether tx without gas specified will fail.
     function () payable {
+         require(msg.value > calculate_minimum_contribution());
+
          // Did the user already contribute
          user storage current_user = users[msg.sender];
 
