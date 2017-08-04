@@ -17,7 +17,7 @@ contract SharkPool is ReentrancyGuard {
     uint256 public divisible_units = 100000;
 
     // How long will a payment event mine blocks for you
-    uint256 public contract_period = 144;
+    uint256 public contract_period = 100;
     uint256 public mined_blocks = 1;
     uint256 public claimed_blocks = 1;
     uint256 public blockCreationRate = 0;
@@ -35,6 +35,14 @@ contract SharkPool is ReentrancyGuard {
     uint8[] slots;
     address[256] public active_users; // Should equal max_users
 
+    function find_contribution(address _who) constant external returns (uint256, uint256, uint256, uint256) {
+      if (users[_who].start_block > 0) {
+         user memory u = users[_who];
+         return (u.start_block, u.end_block, u.proportional_contribution, u.proportional_contribution * contract_period);
+      }
+      return (0,0,0,0);
+    }
+
     function allocate_slot(address _who) internal {
        if(total_users < max_users) { 
             // Just push into active_users
@@ -42,7 +50,7 @@ contract SharkPool is ReentrancyGuard {
             total_users += 1;
           } else {
             // The maximum users have been reached, can we allocate a free space?
-            if (slots.length > 0) {
+            if (slots.length == 0) {
                 // There isn't any room left
                 revert();
             } else {
@@ -99,13 +107,13 @@ contract SharkPool is ReentrancyGuard {
       base_contract = BitcoineumInterface(get_bitcoineum_contract_address());
     }
 
-    function calculate_minimum_contribution() constant returns (uint256)  {
-       return base_contract.currentDifficultyWei() / 10000000;
+    function calculate_minimum_contribution() public constant returns (uint256)  {
+       return base_contract.currentDifficultyWei() / 10000000 * contract_period;
     }
 
     // A default ether tx without gas specified will fail.
     function () payable {
-         require(msg.value > calculate_minimum_contribution());
+         require(msg.value >= calculate_minimum_contribution());
 
          // Did the user already contribute
          user storage current_user = users[msg.sender];

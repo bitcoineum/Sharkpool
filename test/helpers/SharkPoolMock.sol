@@ -19,6 +19,7 @@ contract SharkPoolMock is SharkPool {
 
   function set_bitcoineum_contract_address(address _addr) public {
     bitcoineum_contract_address = _addr;
+    base_contract = BitcoineumInterface(get_bitcoineum_contract_address());
   }
 
   function set_total_users(uint256 _totalUsers) public {
