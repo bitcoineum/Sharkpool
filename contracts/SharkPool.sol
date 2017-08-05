@@ -9,7 +9,8 @@ import 'zeppelin-solidity/contracts/ReentrancyGuard.sol';
 
 contract SharkPool is ReentrancyGuard {
 
-    uint256 constant public max_users = 256;
+    string constant public pool_name = "SharkPool 100";
+    uint256 constant public max_users = 255;
 
     // Track total users to switch to degraded case when contract is full
     uint256 public total_users = 0;
@@ -74,6 +75,9 @@ contract SharkPool is ReentrancyGuard {
         }
      }
   
+   event LogEvent(
+       uint256 _info
+   );
 
     function get_bitcoineum_contract_address() public constant returns (address) {
        return 0x73dD069c299A5d691E9836243BcaeC9c8C1D8734;
@@ -89,11 +93,13 @@ contract SharkPool is ReentrancyGuard {
           if (user_address > 0) {
               uint256 proportion = users[user_address].proportional_contribution;
               uint256 divided_portion = (proportion * divisible_units) / _totalAttempt;
+              //LogEvent(divided_portion);
               uint256 payout = (_balance * divided_portion) / divisible_units;
               if (payout > remaining_balance) {
                  payout = remaining_balance;
               }
-              base_contract.transferFrom(this, user_address, payout);
+              LogEvent(payout);
+              base_contract.transfer(user_address, payout);
               remaining_balance = remaining_balance - payout;
               if (remaining_balance == 0) {
                  return;
@@ -106,6 +112,11 @@ contract SharkPool is ReentrancyGuard {
       blockCreationRate = 50; // match bte
       base_contract = BitcoineumInterface(get_bitcoineum_contract_address());
     }
+
+    function current_external_block() public constant returns (uint256) {
+        return block.number;
+    }
+
 
     function calculate_minimum_contribution() public constant returns (uint256)  {
        return base_contract.currentDifficultyWei() / 10000000 * contract_period;
@@ -142,14 +153,14 @@ contract SharkPool is ReentrancyGuard {
    function mine() external nonReentrant
    {
      // Did someone already try to mine this block?
-     uint256 _blockNum = external_to_internal_block_number(block.number);
+     uint256 _blockNum = external_to_internal_block_number(current_external_block());
      require(!base_contract.checkMiningAttempt(_blockNum, this));
 
      // Alright nobody mined lets iterate over our active_users
 
      uint256 total_attempt = 0;
 
-     for (uint8 i=0; i<max_users; i++) {
+     for (uint8 i=0; i < total_users; i++) {
          if (active_users[i] > 0) {
              // This user exists
              user memory u = users[active_users[i]];
@@ -164,11 +175,12 @@ contract SharkPool is ReentrancyGuard {
              }
          }
      }
-
-     // Now we have a total contribution amount
-     attempts[_blockNum] = total_attempt;
-     base_contract.mine.value(total_attempt)();
-     mined_blocks = mined_blocks + 1;
+     if (total_attempt > 0) {
+        // Now we have a total contribution amount
+        attempts[_blockNum] = total_attempt;
+        base_contract.mine.value(total_attempt)();
+        mined_blocks = mined_blocks + 1;
+     }
    }
 
    function claim(uint256 _blockNumber, address forCreditTo)
@@ -183,7 +195,7 @@ contract SharkPool is ReentrancyGuard {
 
                   // We won let's get our reward
                   base_contract.claim(_blockNumber, a);
-                  
+                  //
                   uint256 balance = base_contract.balanceOf(this);
                   uint256 total_attempt = attempts[_blockNumber];
 
