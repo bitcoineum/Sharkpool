@@ -2,20 +2,27 @@ pragma solidity ^0.4.13;
 
 import './BitcoineumInterface.sol';
 import 'zeppelin-solidity/contracts/ReentrancyGuard.sol';
+import 'zeppelin-solidity/contracts/ownership/Ownable.sol';
 
 // Sharkpool is a rolling window Bitcoineum miner
 // Smart contract based virtual mining
 // http://www.bitcoineum.com/
 
-contract SharkPool is ReentrancyGuard {
+contract SharkPool is Ownable, ReentrancyGuard {
 
     string constant public pool_name = "SharkPool 100";
-    uint256 constant public max_users = 255;
+
+    // Percentage of BTE pool takes for operations
+    uint256 public pool_percentage = 0;
+
+    // Limiting users because of gas limits
+    // I would not increase this value it could make the pool unstable
+    uint256 constant public max_users = 100;
 
     // Track total users to switch to degraded case when contract is full
     uint256 public total_users = 0;
 
-    uint256 public divisible_units = 100000;
+    uint256 public constant divisible_units = 10000000;
 
     // How long will a payment event mine blocks for you
     uint256 public contract_period = 100;
@@ -33,15 +40,36 @@ contract SharkPool is ReentrancyGuard {
 
     mapping (address => user) public users;
     mapping (uint256 => uint256) public attempts;
+    mapping(address => uint256) balances;
     uint8[] slots;
     address[256] public active_users; // Should equal max_users
 
-    function find_contribution(address _who) constant external returns (uint256, uint256, uint256, uint256) {
+    function balanceOf(address _owner) constant returns (uint256 balance) {
+      return balances[_owner];
+    }
+
+    function set_pool_percentage(uint8 _percentage) external nonReentrant onlyOwner {
+       // Just in case owner is compromised
+       require(_percentage < 6);
+       pool_percentage = _percentage;
+    }
+
+
+    function find_contribution(address _who) constant external returns (uint256, uint256, uint256, uint256, uint256) {
       if (users[_who].start_block > 0) {
          user memory u = users[_who];
-         return (u.start_block, u.end_block, u.proportional_contribution, u.proportional_contribution * contract_period);
+         uint256 remaining_period= 0;
+         if (u.end_block > mined_blocks) {
+            remaining_period = u.end_block - mined_blocks;
+            } else {
+            remaining_period = 0;
+            }
+         return (u.start_block, u.end_block,
+                 u.proportional_contribution,
+                 u.proportional_contribution * contract_period,
+                 u.proportional_contribution * remaining_period);
       }
-      return (0,0,0,0);
+      return (0,0,0,0,0);
     }
 
     function allocate_slot(address _who) internal {
@@ -90,20 +118,15 @@ contract SharkPool is ReentrancyGuard {
       uint256 remaining_balance = _balance;
       for (uint8 i = 0; i < total_users; i++) {
           address user_address = active_users[i];
-          if (user_address > 0) {
+          if (user_address > 0 && remaining_balance != 0) {
               uint256 proportion = users[user_address].proportional_contribution;
               uint256 divided_portion = (proportion * divisible_units) / _totalAttempt;
-              //LogEvent(divided_portion);
               uint256 payout = (_balance * divided_portion) / divisible_units;
               if (payout > remaining_balance) {
                  payout = remaining_balance;
               }
-              LogEvent(payout);
-              base_contract.transfer(user_address, payout);
+              balances[user_address] = balances[user_address] + payout;
               remaining_balance = remaining_balance - payout;
-              if (remaining_balance == 0) {
-                 return;
-              }
           }
       }
     }
@@ -140,6 +163,10 @@ contract SharkPool is ReentrancyGuard {
             } else {
                current_user.proportional_contribution = msg.value / contract_period;
             }
+
+          // If the user exists and has a balance let's transfer it to them
+          do_redemption();
+
           } else {
                current_user.proportional_contribution = msg.value / contract_period;
                allocate_slot(msg.sender);
@@ -159,16 +186,22 @@ contract SharkPool is ReentrancyGuard {
      // Alright nobody mined lets iterate over our active_users
 
      uint256 total_attempt = 0;
+     uint8 total_ejected = 0; 
 
      for (uint8 i=0; i < total_users; i++) {
-         if (active_users[i] > 0) {
+         address user_address = active_users[i];
+         if (user_address > 0) {
              // This user exists
-             user memory u = users[active_users[i]];
-             if (u.end_block < mined_blocks) {
+             user memory u = users[user_address];
+             if (u.end_block <= mined_blocks) {
                 // This user needs to be ejected, no more attempts left
-                delete active_users[i];
-                slots.push(i);
-                delete users[active_users[i]];
+                // but we limit to 20 to prevent gas issues on slot insert
+                if (total_ejected < 10) {
+                    delete active_users[i];
+                    slots.push(i);
+                    delete users[active_users[i]];
+                    total_ejected = total_ejected + 1;
+                }
              } else {
                // This user is still active
                total_attempt = total_attempt + u.proportional_contribution;
@@ -186,23 +219,39 @@ contract SharkPool is ReentrancyGuard {
    function claim(uint256 _blockNumber, address forCreditTo)
                   nonReentrant
                   external returns (bool) {
-                  address a = forCreditTo; // Squelch compiler warning, we keep this for compat with bte tools
-                  a = this;
                   
                   // Did we win the block in question
                   require(base_contract.checkWinning(_blockNumber));
 
+                  uint256 initial_balance = base_contract.balanceOf(this);
 
                   // We won let's get our reward
-                  base_contract.claim(_blockNumber, a);
-                  //
+                  base_contract.claim(_blockNumber, this);
+
                   uint256 balance = base_contract.balanceOf(this);
                   uint256 total_attempt = attempts[_blockNumber];
 
-                  distribute_reward(total_attempt, balance);
+                  distribute_reward(total_attempt, balance - initial_balance);
                   claimed_blocks = claimed_blocks + 1;
                   }
 
+   function do_redemption() internal {
+     uint256 balance = balances[msg.sender];
+     if (balance > 0) {
+        uint256 owner_cut = (balance / 100) * pool_percentage;
+        uint256 remainder = balance - owner_cut;
+        if (owner_cut > 0) {
+            base_contract.transfer(owner, owner_cut);
+        }
+        base_contract.transfer(msg.sender, remainder);
+        balances[msg.sender] = 0;
+    }
+   }
+
+   function redeem() external nonReentrant
+     {
+        do_redemption();
+     }
 
    function checkMiningAttempt(uint256 _blockNum, address _sender) constant public returns (bool) {
       return base_contract.checkMiningAttempt(_blockNum, _sender);
