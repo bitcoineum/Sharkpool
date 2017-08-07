@@ -1,0 +1,15 @@
+Sharkpool is a rolling smart contract miner
+Bets are distributed over 100 blocks and aggregated between miners
+Rewards are paid out on subsequent bets or by using the redeem function
+
+The pool needs to be triggered externally by a vps script
+
+npm compile
+npm run mine
+
+You may need to:
+mkdir -p build/contracts/
+cp -pr release/08-06-2017/* build/contracts/
+
+Sharkpool 100 is deployed at
+0x29aa20fb9b23421e310bdb8a7cfb81d7fbb4a1b3
