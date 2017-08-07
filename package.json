@@ -6,9 +6,9 @@
   "scripts": {
     "test": "scripts/test.sh",
     "console": "truffle console",
-    "build": "webpack",
-    "web": "scripts/web.sh",
-    "webpack": "webpack-dev-server"
+    "build": "truffle compile",
+    "migrate": "truffle migrate",
+    "mine": "npm-run webpack && npm-run node build/sharkpool.js"
   },
   "repository": {
     "type": "git",
@@ -49,6 +49,7 @@
     "chai": "^4.0.2",
     "chai-as-promised": "^7.0.0",
     "chai-bignumber": "^2.0.0",
+    "circular-dependency-plugin": "^3.0.0",
     "copy-webpack-plugin": "^4.0.1",
     "coveralls": "^2.13.1",
     "css-loader": "^0.28.4",
@@ -56,6 +57,7 @@
     "eslint-config-google": "^0.9.1",
     "ethereum-blocks": "^1.0.3",
     "ethereumjs-testrpc": "^3.0.2",
+    "json-loader": "^0.5.7",
     "mocha-lcov-reporter": "^1.3.0",
     "moment": "^2.18.1",
     "solidity-coverage": "^0.1.0",

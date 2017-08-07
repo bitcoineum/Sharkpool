@@ -108,7 +108,9 @@ contract SharkPool is Ownable, ReentrancyGuard {
    );
 
     function get_bitcoineum_contract_address() public constant returns (address) {
-       return 0x73dD069c299A5d691E9836243BcaeC9c8C1D8734;
+       return 0x73dD069c299A5d691E9836243BcaeC9c8C1D8734; // Production
+    
+       // return 0x7e7a299da34a350d04d204cd80ab51d068ad530f; // Testing
     }
 
     // iterate over all account holders
