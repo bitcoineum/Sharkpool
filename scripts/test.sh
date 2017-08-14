@@ -1,15 +1,13 @@
 #! /bin/bash
 
-output=$(nc -z localhost 8545; echo $?)
+output=$(nc -z localhost 8646; echo $?)
 [ $output -eq "0" ] && trpc_running=true
 if [ ! $trpc_running ]; then
   echo "Starting our own testrpc node instance"
   # we give each account 1M ether, needed for high-value tests
-  npm-run testrpc \
-    --accounts="300"\
-  > /dev/null &
-  trpc_pid=$!
+  npm-run testrpc --port=8646 --accounts="1000" > /dev/null & trpc_pid=$!
 fi
+sleep 10
 npm-run truffle test "$@"
 if [ ! $trpc_running ]; then
   kill -9 $trpc_pid

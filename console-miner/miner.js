@@ -40,8 +40,8 @@ export default class BitcoineumMiner {
 		self.provider = new Web3(provider);
 		this.mining_account = miningAccount;
 		this.mining_account = miningAccount;
-		this.default_mine_gas = 600000;
-		this.default_claim_gas = 600000;
+		this.default_mine_gas = 1200000;
+		this.default_claim_gas = 1200000;
 		this.default_gas_price = 0; // This is set by default_price callback
 		this.auto_mine = true;
 
@@ -164,7 +164,7 @@ export default class BitcoineumMiner {
         await self.update_balance();
 	    self.external_block = currentExternalBlock; // External best block on sync
         await self.update_state();
-        self.default_gas_price = self.provider.toWei('20', 'gwei');
+        self.default_gas_price = self.provider.toWei('2', 'gwei');
         self.printStats();
 	    self.subscribeBlockWatching(); // Let's watch for new blocks
 	}

@@ -11,8 +11,8 @@ import '../../contracts/SharkPool.sol';
 
 contract SharkPoolMock is SharkPool {
 
-  address bitcoineum_contract_address;
-  uint256 current_block = 1;
+  address public bitcoineum_contract_address;
+  uint256 public current_block = 1;
 
   function current_external_block() public constant returns (uint256) {
      return current_block;
@@ -31,14 +31,26 @@ contract SharkPoolMock is SharkPool {
     base_contract = BitcoineumInterface(get_bitcoineum_contract_address());
   }
 
-  function set_total_users(uint256 _totalUsers) public {
+  function set_allocated_users(uint256 _totalUsers) public {
     total_users = _totalUsers;
   }
+
+  function set_max_users(uint256 _maxUsers) public {
+     max_users = _maxUsers;
+     }
 
   // Directly mock internal functions
 
   function do_allocate_slot(address _who) public {
      allocate_slot(_who);
+  }
+
+  function next_block() {
+     current_block += 50;
+  }
+
+  function bte_block() public constant returns (uint256) {
+     return external_to_internal_block_number(current_external_block());
   }
 
 }

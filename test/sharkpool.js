@@ -70,7 +70,7 @@ async function setup_miner() {
 contract('SharkPoolTest', function(accounts) {
 
 
-  // Maxint in Ether
+//  // Maxint in Ether
   var maxint = new BigNumber(2).toPower(256).minus(1);
 
   it("should have an owner for pool operations", async function() {
@@ -83,9 +83,29 @@ contract('SharkPoolTest', function(accounts) {
     let miner = await setup_miner();
     let percentage = await miner.pool_percentage();
     assert.equal(percentage.valueOf(), 0);
-    await miner.set_pool_percentage(5);
+    await miner.pool_set_percentage(5);
     percentage = await miner.pool_percentage();
     assert.equal(percentage.valueOf(), 5);
+  });
+
+
+  it("should allow the owner to pause the pool", async function() {
+    let miner = await setup_miner();
+    let paused = await miner.isPaused();
+    assert.isFalse(paused);
+    await miner.pool_set_paused(true);
+    paused = await miner.isPaused();
+    assert.isTrue(paused);
+  });
+
+  it("should not allow mining on a paused pool", async function() {
+    let miner = await setup_miner();
+    await miner.pool_set_paused(true);
+    try {
+        await miner.sendTransaction({value: web3.toWei(1, 'ether'), from: accounts[0], gas: '125000'});
+    } catch(error) {
+        assertJump(error);
+    }
   });
 
 
@@ -111,12 +131,14 @@ contract('SharkPoolTest', function(accounts) {
   	  let miner = await setup_miner();
   	  let max_users = await miner.max_users();
   	  assert.equal(max_users, 100);
+  	  let available_slots = await miner.available_slots();
+  	  assert.equal(available_slots, 100);
   	  let contract_period = await miner.contract_period();
   	  assert.equal(contract_period, 100);
   	  let mined_blocks = await miner.mined_blocks();
-  	  assert.equal(mined_blocks, 1);
+  	  assert.equal(mined_blocks.valueOf(), 0);
   	  let claimed_blocks = await miner.claimed_blocks();
-  	  assert.equal(claimed_blocks, 1);
+  	  assert.equal(claimed_blocks.valueOf(), 0);
   	  let blockCreationRate = await miner.blockCreationRate();
   	  assert.equal(blockCreationRate, 50);
   	  let name = await miner.pool_name();
@@ -134,20 +156,10 @@ contract('SharkPoolTest', function(accounts) {
 	  assert.isTrue(caught);
   });
 
-  it("Should not allocate slots by default", async function() {
-  	  let miner = await setup_miner();
-  	  for (var i=0; i<100; i++) {
-  	      await miner.do_allocate_slot(accounts[0])
-      }
-      let total_users = await miner.total_users();
-      assert.equal(total_users.valueOf(), 100);
-      let available_slots = await miner.available_slots();
-      assert.equal(available_slots.valueOf(), 0);
-  });
 
   it("Should throw if there are no available slots and max users is reached", async function() {
       let miner = await setup_miner();
-      await miner.set_total_users(100);
+      await miner.set_allocated_users(100);
 
       try {
           await miner.do_allocate_slot(accounts[0]);
@@ -161,14 +173,18 @@ contract('SharkPoolTest', function(accounts) {
       let miner = await setup_miner();
       let available_slots = await miner.available_slots();
       assert.equal(available_slots.valueOf(), 100);
-      for (var i=1; i<101; i++) {
-          await miner.do_allocate_slot(accounts[0]);
+      for (var i=0; i<100; i++) {
           let available_slots = await miner.available_slots();
           assert.equal(available_slots.valueOf(), 100-i);
+          await miner.do_allocate_slot(accounts[0]);
       }
       available_slots = await miner.available_slots();
       assert.equal(available_slots.valueOf(), 0);
   });
+
+
+
+
 
 
   // Blatantly copied from Bitcoineum tests to ensure compat
@@ -219,8 +235,8 @@ contract('SharkPoolTest', function(accounts) {
       let miner = await setup_miner();
       await miner.sendTransaction({value: '1000000000', from: accounts[0], gas: '125000'});
       let res = await miner.find_contribution(accounts[0]);
-      assert.equal(res[2].toString(), '10000000');
-      assert.equal(res[3].toString(), '1000000000');
+      assert.equal(res[1].toString(), '10000000');
+      assert.equal(res[2].toString(), '1000000000');
   });
 
   it("should return zeros when a contribution does not exist", async function() {
@@ -245,20 +261,20 @@ contract('SharkPoolTest', function(accounts) {
       await miner.sendTransaction({value: '10000000000', from: accounts[4], gas: '125000'});
 
       let res = await miner.find_contribution(accounts[0]);
-      assert.equal(res[2].toString(), '50000000');
-      assert.equal(res[3].toString(), '5000000000');
+      assert.equal(res[1].toString(), '50000000');
+      assert.equal(res[2].toString(), '5000000000');
 
       res = await miner.find_contribution(accounts[1]);
-      assert.equal(res[2].toString(), '20000000');
+      assert.equal(res[1].toString(), '20000000');
 
       res = await miner.find_contribution(accounts[2]);
-      assert.equal(res[2].toString(), '30000000');
+      assert.equal(res[1].toString(), '30000000');
 
       res = await miner.find_contribution(accounts[3]);
-      assert.equal(res[2].toString(), '40000000');
+      assert.equal(res[1].toString(), '40000000');
 
       res = await miner.find_contribution(accounts[4]);
-      assert.equal(res[2].toString(), '100000000');
+      assert.equal(res[1].toString(), '100000000');
 
   });
 
@@ -266,20 +282,28 @@ contract('SharkPoolTest', function(accounts) {
 it("should increment users on unique contribution", async function() {
       let miner = await setup_miner();
       await miner.sendTransaction({value: '1000000000', from: accounts[0], gas: '125000'});
-      let res = await miner.total_users();
-      assert.equal(res.valueOf(), 1);
+      let res = await miner.available_slots();
+      assert.equal(res.valueOf(), 99);
+      let used = await miner.slots_used();
+      assert.equal(used.valueOf(), 1);
       
       await miner.sendTransaction({value: '1000000000', from: accounts[0], gas: '125000'});
-      res = await miner.total_users();
-      assert.equal(res.valueOf(), 1);
+      res = await miner.available_slots();
+      assert.equal(res.valueOf(), 99);
+      used = await miner.slots_used();
+      assert.equal(used.valueOf(), 1);
 
       await miner.sendTransaction({value: '1000000000', from: accounts[1], gas: '125000'});
-      res = await miner.total_users();
-      assert.equal(res.valueOf(), 2);
+      res = await miner.available_slots();
+      assert.equal(res.valueOf(), 98);
+      used = await miner.slots_used();
+      assert.equal(used.valueOf(), 2);
 
       await miner.sendTransaction({value: '1000000000', from: accounts[2], gas: '125000'});
-      res = await miner.total_users();
-      assert.equal(res.valueOf(), 3);
+      res = await miner.available_slots();
+      assert.equal(res.valueOf(), 97);
+      used = await miner.slots_used();
+      assert.equal(used.valueOf(), 3);
   });
 
 
@@ -294,14 +318,14 @@ it("should make no mining attempt when there are no users", async function() {
 it("should make one mining attempt for single users value", async function() {
 	let starting_balance = await web3.eth.getBalance("0xdeaDDeADDEaDdeaDdEAddEADDEAdDeadDEADDEaD");
     let miner = await setup_miner();
-    await miner.sendTransaction({value: '1000000000', from: accounts[0], gas: '125000'});
+    await miner.sendTransaction({value: web3.toWei('0.00001', 'ether'), from: accounts[0], gas: '125000'});
     await miner.mine({gas: '400000'});
 	let balance = await web3.eth.getBalance("0xdeaDDeADDEaDdeaDdEAddEADDEAdDeadDEADDEaD");
-	assert.equal(balance.minus(starting_balance).toString(), '10000000');
-	let total_users = await miner.total_users();
-	assert.equal(total_users, 1);
+	assert.equal(balance.minus(starting_balance).toString(), web3.toWei('0.0000001', 'ether'));
+	let total_users = await miner.available_slots();
+	assert.equal(total_users.valueOf(), 99);
 	let mined_blocks = await miner.mined_blocks();
-	assert.equal(mined_blocks, 2);
+	assert.equal(mined_blocks.valueOf(), 1);
 });
 
 it("should return false for checkMiningAttempt by default", async function() {
@@ -313,7 +337,7 @@ it("should return false for checkMiningAttempt by default", async function() {
 
 it("should return true for checkMiningAttempt following an attempt", async function() {
     let miner = await setup_miner();
-    await miner.sendTransaction({value: '1000000000', from: accounts[0], gas: '125000'});
+    await miner.sendTransaction({value: web3.toWei('0.00001', 'ether'), from: accounts[0], gas: '125000'});
     await miner.mine({gas: '400000'});
     let attempt = await miner.checkMiningAttempt(0, miner.address); 
     assert.isTrue(attempt);
@@ -430,7 +454,7 @@ it("multiple pool miners should split rounded reward on odd participants", async
 	await bte_instance.set_block(51);
 
     // Account is ignored, but maintains interface compat with BTE.
-	await miner.claim(0, accounts[0], {gas: '300000'});
+	await miner.claim(0, accounts[0], {gas: '800000'});
 
 	// This should have distributed the entire BTE block to the sole miner in the pool	
 
@@ -580,8 +604,8 @@ it("should allow forward balance adjustments at any time", async function() {
 
 
      let res = await miner.find_contribution(accounts[0]);
-     assert.equal(res[2].toString(), '100000000000000'); 
-     assert.equal(res[4].toString(), '5000000000000000'); 
+     assert.equal(res[1].toString(), '100000000000000'); 
+     assert.equal(res[3].toString(), '5000000000000000'); 
 
      // Increase the bet
 
@@ -590,14 +614,14 @@ it("should allow forward balance adjustments at any time", async function() {
      // Proportional contribution should now change
 
      res = await miner.find_contribution(accounts[0]);
-     assert.equal(res[2].toString(), '150000000000000');
-     assert.equal(res[3].toString(), '15000000000000000');
+     assert.equal(res[1].toString(), '150000000000000');
+     assert.equal(res[2].toString(), '15000000000000000');
    
      // Secondary account should be unaffected
 
      res = await miner.find_contribution(accounts[1]);
-     assert.equal(res[2].toString(), '100000000000000'); 
-     assert.equal(res[4].toString(), '5000000000000000'); 
+     assert.equal(res[1].toString(), '100000000000000'); 
+     assert.equal(res[3].toString(), '5000000000000000'); 
 });
 
 
@@ -606,7 +630,7 @@ it("should allow us to add up to max_users unique accounts to the pool", async f
     let miner = await setup_miner();
 
     for (var i=0; i<100; i++) {
-        await miner.sendTransaction({value: '10000000000000000', from: accounts[i], gas: '125000'});
+        await miner.sendTransaction({value: '10000000000000000', from: accounts[i], gas: '150000'});
     }
 
     let available_slots = await miner.available_slots();
@@ -615,7 +639,7 @@ it("should allow us to add up to max_users unique accounts to the pool", async f
     // Adding another miner will fail
 
     try {
-        await miner.sendTransaction({value: '10000000000000000', from: accounts[290], gas: '125000'});
+        await miner.sendTransaction({value: '10000000000000000', from: accounts[290], gas: '150000'});
     } catch(error) {
         assertJump(error);
     }
@@ -643,16 +667,15 @@ it("should allow us to add up to max_users unique accounts to the pool", async f
     }
 
     let mined_blocks = await miner.mined_blocks();
-    assert.equal(mined_blocks.valueOf(), 101);
+    assert.equal(mined_blocks.valueOf(), 100);
 
     available_slots = await miner.available_slots();
     assert.equal(available_slots.valueOf(), 0);
 
-    let total_users = await miner.total_users();
-    assert.equal(total_users, 100);
+    let total_users = await miner.slots_used();
+    assert.equal(total_users.valueOf(), 100);
 
-    await miner.mine({gas: '600000'});
-
+    await miner.mine({gas: '3000000'});
 
     available_slots = await miner.available_slots();
     assert.equal(available_slots.valueOf(), 10);
@@ -661,7 +684,7 @@ it("should allow us to add up to max_users unique accounts to the pool", async f
 
 it("should distribute a percentage of the pool on redemption", async function() {
     let miner = await setup_miner();
-    await miner.set_pool_percentage(5);
+    await miner.pool_set_percentage(5);
     // This exhausts the minimum difficulty over 100 block period
     await miner.sendTransaction({value: '10000000000000000', from: accounts[1], gas: '125000'});
     await miner.mine({gas: '400000'});
@@ -691,6 +714,137 @@ it("should distribute a percentage of the pool on redemption", async function() 
 	assert.equal(balance.valueOf(), 5*(10**8));
 
 });
+
+
+async function fill_pool(miner, offset, ether) {
+    let a = await miner.available_slots();
+    //console.log("Available slots before fill: " + a);
+    for (var i=0; i<10; i++) {
+         await miner.sendTransaction({value: ether, from: accounts[(offset*10)+i], gas: '150000'});
+    }
+    let b = await miner.available_slots();
+    //console.log("available slots after fill: " + b);
+    await bte_instance.next_block();
+    await miner.next_block();
+}
+
+async function drain_pool(miner) {
+    for (var i=0; i<100; i++) {
+        await miner.mine({gas: '1000000'});
+        await bte_instance.next_block();
+	    await miner.next_block();
+	    let b = await miner.current_block();
+        let attempt = await miner.checkWinning(b.dividedToIntegerBy(50)-1, {gas: '200000'}); 
+        if (attempt) {
+             await miner.claim(b.dividedToIntegerBy(50).valueOf()-1, accounts[0], {gas: '2000000'});
+        } else  {
+            assert.isFalse(true);
+        }
+    }
+
+}
+
+async function free_space(miner) {
+    //let mined_blocks = await miner.mined_blocks();
+    //console.log("Total mining attempts " + mined_blocks);
+    //let claimed_blocks = await miner.claimed_blocks();
+    //console.log("Claimed blocks " + claimed_blocks);
+    //let res = await miner.get_total_attempt();
+    //console.log("Total next bet: " + res[0].valueOf() + " " + res[1].valueOf());
+    await bte_instance.next_block();
+    await miner.next_block();
+    await miner.mine({gas: '2000000'});
+    //await miner.mine({gas: '2000000'});
+    await bte_instance.next_block();
+    await miner.next_block();
+
+    let a = await miner.available_slots();
+    console.log("Available slots after FREE: " + a);
+}
+
+async function claim_balance(miner, offset) {
+    for (var i=0; i<10; i++) {
+        await miner.redeem({from: accounts[(offset*10)+i]});
+    }
+
+}
+
+
+it("should distribute a percentage of the pool on redemption", async function() {
+    // I.e when we run through many fills of the pool followed by complete emptying
+    // we should not be left with any accounts that did not get a bte balance
+    // from the miner
+    //
+    let miner = await setup_miner();
+    // This exhausts the minimum difficulty over 100 block period
+
+    await miner.set_max_users(10);
+    var iterations=5;
+    for (var i=0; i<iterations; i++) {
+        await fill_pool(miner, i, web3.toWei('0.001', 'ether'));
+        await drain_pool(miner);
+        await free_space(miner);
+    }
+
+    // Let's look for miners that didn't get anything
+    for (var i=0; i<(iterations*10); i++) {
+        let balance = await miner.balanceOf(accounts[i]);
+        assert.equal(balance.valueOf(), 100000000000);
+    }
+
+});
+
+ it("every user should be able to redeem their balance", async function() {
+     // I.e when we run through many fills of the pool followed by complete emptying
+     // we should not be left with any accounts that did not get a bte balance
+     // from the miner
+     //
+     let miner = await setup_miner();
+     // This exhausts the minimum difficulty over 100 block period
+ 
+     await miner.set_max_users(10);
+     var iterations=5;
+     for (var i=0; i<iterations; i++) {
+         await fill_pool(miner, i, web3.toWei('0.001', 'ether'));
+         await drain_pool(miner);
+         await free_space(miner);
+         await claim_balance(miner, i);
+     }
+ 
+     // Let's look for miners that didn't get anything
+     for (var i=0; i<(iterations*10); i++) {
+         let balance = await miner.balanceOf(accounts[i]);
+         // All balances should be claimed
+         assert.equal(balance.valueOf(), 0);
+         let bte_balance = await bte_instance.balanceOf(accounts[i]);
+         assert.equal(bte_balance.valueOf(), 100000000000);
+ 
+     }
+ 
+ });
+
+
+
+it("should distribute a percentage of the pool on redemption when odd", async function() {
+    let miner = await setup_miner();
+    // This exhausts the minimum difficulty over 100 block period
+
+    await miner.set_max_users(10);
+    var iterations=5;
+    for (var i=0; i<iterations; i++) {
+        await fill_pool(miner, i, web3.toWei('0.0033', 'ether'));
+        await drain_pool(miner);
+        await free_space(miner);
+    }
+
+    // Let's look for miners that didn't get anything
+    for (var i=0; i<(iterations*10); i++) {
+        let balance = await miner.balanceOf(accounts[i]);
+        assert.equal(balance.valueOf(), 100000000000);
+    }
+
+});
+
 
 });
 
