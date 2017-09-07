@@ -7,6 +7,8 @@ The pool needs to be triggered externally by a vps script
 npm compile
 npm run mine
 
+You should edit the account that is being used to mine in console-miner/sharkpool.js
+
 You may need to:
 mkdir -p build/contracts/
 cp -pr release/08-06-2017/* build/contracts/
