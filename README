@@ -11,5 +11,12 @@ You may need to:
 mkdir -p build/contracts/
 cp -pr release/08-06-2017/* build/contracts/
 
-Sharkpool 100 is deployed at
-0x29aa20fb9b23421e310bdb8a7cfb81d7fbb4a1b3
+There are also scripts/prepare_sharkpool3.sh and prepare_sharkpool4.sh
+both copy local artifacts into build/contracts so they can be used by the
+console miner and utilities.
+
+Original Sharkpool 0x29aa20fb9b23421e310bdb8a7cfb81d7fbb4a1b3
+
+Sharkpool 3 0x2918DAF5b7c6Cd43E3C9Fce08b3Bde11B09A15B5
+
+Sharkpool 4 0x6cD239a7717c1639214880e53f38F47C99d6cFFC
